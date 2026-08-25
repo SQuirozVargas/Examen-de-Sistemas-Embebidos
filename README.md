@@ -31,11 +31,11 @@ se ejecutan de manera concurrente. Cada tarea puede tener su propia prioridad, p
 ejecución y función específica, lo que mejora la organización del código y la capacidad de 
 respuesta del sistema.
 El uso de FreeRTOS permite: 
-· Ejecutar múltiples tareas en paralelo. 
-· Asignar prioridades según la importancia de cada proceso. 
-· Evitar bloqueos del sistema. 
-· Sincronizar tareas mediante semáforos, colas y eventos. 
-· Aprovechar los dos núcleos del ESP32. 
++ Ejecutar múltiples tareas en paralelo. 
++ Asignar prioridades según la importancia de cada proceso. 
++ Evitar bloqueos del sistema. 
++ Sincronizar tareas mediante semáforos, colas y eventos. 
++ Aprovechar los dos núcleos del ESP32. 
 
 
 
