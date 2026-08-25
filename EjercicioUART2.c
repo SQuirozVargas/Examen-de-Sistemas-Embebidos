@@ -4,7 +4,7 @@
  * Descripción: Inicializa el puerto UART2 a 115200 baudios (TX=GPIO17, RX=GPIO16),
  * procesa comandos seriales entrantes y ejecuta acciones sobre variables internas y un LED.
  */
-
+// OJO: No usamos el Framework de ARDUINO 
 #include <stdio.h>             // Funciones estándar de E/S de C como snprintf() para formatear cadenas[cite: 6].
 #include <string.h>            // Funciones de manipulación de cadenas como strcmp(), strlen() y strcspn()[cite: 6].
 #include "freertos/FreeRTOS.h" // Cabecera principal del sistema operativo en tiempo real FreeRTOS.
