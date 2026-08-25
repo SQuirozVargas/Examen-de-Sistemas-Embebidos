@@ -1,0 +1,117 @@
+/*
+Implementar un sistema que utilice uno o más modos de ahorro de energía del ESP32, tales
+como:
+· Modem Sleep
+· Light Sleep
+· Deep Sleep
+· Hibernation
+El sistema deberá:
+· Ejecutar una tarea activa durante un tiempo determinado.
+· Entrar en uno de los modos de bajo consumo automáticamente.
+· “Despertar” mediante un evento (temporizador o pin externo).
+· Indicar mediante LED RGB o mensajes seriales los estados del sistema.
+Requisitos técnicos
+· Configuración explícita del modo de ahorro utilizado.
+· Uso de temporizadores de despertar (esp_sleep_enable_timer_wakeup()).
+· Uso de pines externos de despertar (esp_sleep_enable_ext0_wakeup()).
+· Evidencia de prueba en hardware real (solo en los modos deep sleep o Hibernation).
+· Análisis breve del comportamiento del sistema.
+· Código estructurado en funciones.
+*/
+/*
+Implementar un sistema que utilice uno o más modos de ahorro de energía del ESP32, tales
+como:
+· Modem Sleep
+· Light Sleep
+· Deep Sleep
+· Hibernation
+El sistema deberá:
+· Ejecutar una tarea activa durante un tiempo determinado.
+· Entrar en uno de los modos de bajo consumo automáticamente.
+· “Despertar” mediante un evento (temporizador o pin externo).
+· Indicar mediante LED RGB o mensajes seriales los estados del sistema.
+Requisitos técnicos
+· Configuración explícita del modo de ahorro utilizado.
+· Uso de temporizadores de despertar (esp_sleep_enable_timer_wakeup()).
+· Uso de pines externos de despertar (esp_sleep_enable_ext0_wakeup()).
+· Evidencia de prueba en hardware real (solo en los modos deep sleep o Hibernation).
+· Análisis breve del comportamiento del sistema.
+· Código estructurado en funciones.
+*/
+#include <Arduino.h>
+#include "esp_sleep.h" // Cabecera nativa de ESP-IDF para control de reposo
+
+// Definición de Pines de Hardware
+#define LED_PIN          2   // LED indicador de estado (GPIO 2)
+#define BUTTON_PIN      33   // Pin con capacidad RTC (GPIO 33) para despertar externo'
+
+#define SERIAL_BAUD_RATE 115200
+// Conversor de microsegundos a segundos para el Timer Wakeup
+#define uS_TO_S_FACTOR 1000000ULL // ULL significa unsigned long long de minimo 64 bits
+#define TIME_TO_SLEEP  10         // Tiempo en segundos que estará dormido
+
+// Variable almacenada en la memoria RAM del RTC (mantiene su valor en Deep Sleep)
+RTC_DATA_ATTR static uint32_t boot_count = 0;
+
+// Función para determinar y mostrar el motivo por el cual despertó el ESP32
+void print_wakeup_reason() {
+    esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+
+    switch (wakeup_reason) {
+        case ESP_SLEEP_WAKEUP_EXT0:
+            Serial.println("[DESPERTAR] Provocado por PIN EXTERNO (Botón en RTC GPIO 33)");
+            break;
+        case ESP_SLEEP_WAKEUP_TIMER:
+            Serial.println("[DESPERTAR] Provocado por TEMPORIZADOR RTC (10 segundos transcurridos)");
+            break;
+        default:
+            Serial.printf("[DESPERTAR] Inicio normal / Reset del sistema (Causa: %d)\r\n", wakeup_reason);
+            break;
+    }
+}
+
+void setup() {
+    // 1. Inicialización del puerto serie
+    Serial.begin(SERIAL_BAUD_RATE);
+    delay(1000); // Pausa de estabilización
+
+    // Incrementar y mostrar el contador almacenado en la RAM del RTC
+    boot_count++;
+    Serial.println("\r\n==============================================");
+    Serial.printf("  ESP32 Deep Sleep - Número de Boot: %d\r\n", boot_count);
+    Serial.println("==============================================");
+
+    // Identificar el motivo del encendido
+    print_wakeup_reason();
+
+    // 2. FASE ACTIVA: Indicación con LED (GPIO 2)
+    pinMode(LED_PIN, OUTPUT);
+    Serial.println("[ESTADO ACTIVO] Ejecutando tarea durante 3 segundos...");
+    
+    for (int i = 0; i < 3; i++) {
+        digitalWrite(LED_PIN, HIGH);
+        delay(500);
+        digitalWrite(LED_PIN, LOW);
+        delay(500);
+    }
+
+    // 3. CONFIGURACIÓN DE FUENTES DE DESPERTAR (WAKEUP SOURCES)
+    // Fuente 1: Temporizador RTC (10 segundos)
+    esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+    Serial.printf("[CONFIG] Temporizador configurado para responder en %d segundos.\r\n", TIME_TO_SLEEP);
+
+    // Fuente 2: Pin Externo (RTC GPIO 33) al detectar pulso ALTO (1)
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 1);
+    Serial.println("[CONFIG] Pin ext0 (GPIO 33) configurado para despertar con pulso ALTO.");
+
+    // 4. ENTRADA A DEEP SLEEP
+    Serial.println("[REPOSO] Entrando a Deep Sleep ahora. Consumo reducido a ~10 uA.");
+    Serial.flush(); // Esperar a que todos los datos en el buffer UART se envíen
+    
+    digitalWrite(LED_PIN, LOW);
+    esp_deep_sleep_start(); // El chip se apaga aquí
+}
+
+void loop() {
+    // En Deep Sleep el código NUNCA llega aquí porque al despertar reinicia desde setup()
+}
