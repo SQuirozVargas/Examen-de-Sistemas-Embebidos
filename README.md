@@ -30,3 +30,4 @@ Una vez que los datos salen del búfer de la UART2, llegan en forma de una caden
 
 
 
+
