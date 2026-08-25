@@ -37,6 +37,32 @@ El uso de FreeRTOS permite:
 + Sincronizar tareas mediante semáforos, colas y eventos. 
 + Aprovechar los dos núcleos del ESP32. 
 
+# Gestión de Energía y Modos de Ahorro en el ESP32
+El consumo energético es un factor crítico en el diseño de sistemas embebidos,
+particularmente en dispositivos portátiles, sensores inalámbricos y aplicaciones IoT. Un
+sistema mal optimizado puede agotar rápidamente la batería, reduciendo su autonomía y
+vida útil.
+El ESP32 incorpora múltiples modos de ahorro de energía, que permiten reducir
+significativamente el consumo cuando el sistema no se encuentra realizando tareas activas. Entre
+los modos más importantes se encuentran:
+### Moderm Sleep: 
+En este modo la CPU está operativa y el reloj es configurable. La
+banda base Wi-Fi/Bluetooth y la radio están desactivadas.
+### Light Sleep: 
+En este modo la CPU está en pausa. La memoria RTC y los periféricos
+RTC, así como el coprocesador ULP, están en funcionamiento. Cualquier evento de
+activación (MAC, host SDIO, temporizador RTC o interrupciones externas) activará el
+chip.
+### Deep Sleep: 
+En este modo solo se alimentan la memoria RTC y los periféricos RTC.
+Los datos de conexión Wi-Fi y Bluetooth se almacenan en la memoria RTC. El
+coprocesador ULP está operativo.
+### Modo de hibernación: 
+El oscilador interno de 8 MHz y el coprocesador ULP están
+desactivados. La memoria de recuperación del RTC está apagada. Solo un
+temporizador RTC en el reloj lento y ciertos GPIO RTC están activos. El temporizador
+RTCo los GPIO RTC pueden activar el chip desde el modo de hibernación.
+
 
 
 
