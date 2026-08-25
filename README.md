@@ -20,8 +20,22 @@ Bluetooth, sensores seriales o para implementar un puerto de comandos externo (u
 Cuando un dispositivo externo envía datos por la línea RX de la UART2, los bits llegan a una velocidad muy alta. El procesador del ESP32 no puede estar esperando congelado a que llegue cada letra, porque debe ejecutar otras funciones del sistema.  Para resolver esto, el driver de ESP-IDF reserva un espacio de memoria RAM llamado Ring Buffer. Cuando llegan bytes por el pin RX, el hardware de la UART2 los almacena automáticamente en este búfer en segundo plano sin interrumpir al procesador.  Posteriormente, el programa utiliza la función uart_read_bytes() con un tiempo de espera (timeout) muy corto. Si hay datos en el búfer, los lee y los procesa; si el búfer está vacío, la función no congela el sistema y le cede el turno de ejecución a otras tareas mediante FreeRTOS. 
 ### Parser de comandos (o intérprete de texto).
 Una vez que los datos salen del búfer de la UART2, llegan en forma de una cadena de texto sin formato (un arreglo de caracteres en C). El objetivo del parser es tomar ese texto, limpiarlo de caracteres no deseados y compararlo para decidir qué acción ejecutar en el hardware.  El primer paso del parser es eliminar los caracteres invisibles de fin de línea, como \r (retorno de carro) o \n (salto de línea), que agregan automáticamente las terminales seriales al presionar la tecla Enter. Si no se quitan estos caracteres, las comparaciones de texto fallarían.
-
-
+# FreeRTOS
+En aplicaciones sencillas, un microcontrolador puede operar correctamente utilizando un 
+único ciclo principal (loop). Sin embargo, a medida que la complejidad del sistema aumenta, 
+este enfoque se vuelve limitado, especialmente cuando se requiere ejecutar múltiples 
+procesos de forma simultánea o con diferentes prioridades. 
+FreeRTOS (Real-Time Operating System) es un sistema operativo en tiempo real integrado 
+de forma nativa en el ESP32, que permite dividir la aplicación en tareas independientes que 
+se ejecutan de manera concurrente. Cada tarea puede tener su propia prioridad, periodo de 
+ejecución y función específica, lo que mejora la organización del código y la capacidad de 
+respuesta del sistema.
+El uso de FreeRTOS permite: 
+· Ejecutar múltiples tareas en paralelo. 
+· Asignar prioridades según la importancia de cada proceso. 
+· Evitar bloqueos del sistema. 
+· Sincronizar tareas mediante semáforos, colas y eventos. 
+· Aprovechar los dos núcleos del ESP32. 
 
 
 
