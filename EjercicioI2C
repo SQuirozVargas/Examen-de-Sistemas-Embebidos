@@ -1,0 +1,115 @@
+/*
+ * EJERCICIO 2: Multitarea con FreeRTOS y 3 Tareas Concurrenciales
+ * - Tarea 1: Control de LED con salida por Serial (Prioridad 2)
+ * - Tarea 2: Telemetría de RAM disponible (Prioridad 1)
+ * - Tarea 3: Muestreo de ADC / Potenciómetro (Prioridad 3)
+ */
+
+#include <Arduino.h>
+
+// Definición de pines y parámetros básicos
+#define LED_PIN          2
+#define POT_PIN          34    // Entrada analógica (ADC)
+#define SERIAL_BAUD_RATE 115200
+
+// ============================================================================
+// TAREA 1: Control del parpadeo del LED (Prioridad Media = 2)
+// ============================================================================
+void Task_Blink(void *pvParameters) {
+    pinMode(LED_PIN, OUTPUT);
+    bool estadoLed = false;
+
+    while (true) {
+        estadoLed = !estadoLed;
+        digitalWrite(LED_PIN, estadoLed ? HIGH : LOW);
+
+        // Imprimir estado del LED por consola
+        Serial.printf("[LED] Estado: %s\r\n", estadoLed ? "ENCENDIDO (HIGH)" : "APAGADO (LOW)");
+
+        // Frecuencia: 500 ms
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+    }
+}
+
+// ============================================================================
+// TAREA 2: Reporte de Telemetría del sistema (Prioridad Baja = 1)
+// ============================================================================
+void Task_Telemetry(void *pvParameters) {
+    uint32_t contadorCiclos = 0;
+
+    while (true) {
+        contadorCiclos++;
+        uint32_t ramLibre = ESP.getFreeHeap();
+
+        // Imprimir reporte de RAM libre por consola
+        Serial.printf("[TELEMETRÍA] Ciclo: %lu | RAM Libre (Heap): %lu bytes\r\n", contadorCiclos, ramLibre);
+
+        // Frecuencia: 2000 ms (2 segundos)
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
+    }
+}
+
+// ============================================================================
+// TAREA 3: Lectura analógica del potenciómetro (Prioridad Alta = 3)
+// ============================================================================
+void Task_Potentiometer(void *pvParameters) {
+    pinMode(POT_PIN, INPUT);
+
+    while (true) {
+        int rawADC = analogRead(POT_PIN);
+        float voltage = (rawADC * 3.3) / 4095.0;
+
+        // Imprimir voltaje medido por consola
+        Serial.printf("[SENSOR POT] Valor ADC: %d | Voltaje: %.2f V\r\n", rawADC, voltage);
+
+        // Frecuencia: 1000 ms (1 segundo)
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+}
+
+// ============================================================================
+// INICIALIZACIÓN Y CONFIGURACIÓN DE TAREAS
+// ============================================================================
+void setup() {
+    Serial.begin(SERIAL_BAUD_RATE);
+    delay(1000);
+
+    Serial.println("\r\n==============================================");
+    Serial.println("  Ejercicio 2: Sistema Multitarea con FreeRTOS ");
+    Serial.println("==============================================\r\n");
+
+    // Tarea 3: Potenciómetro (Prioridad 3 - Alta)
+    xTaskCreate(
+        Task_Potentiometer,
+        "Potentiometer_Task",
+        2048,
+        NULL,
+        3,
+        NULL
+    );
+
+    // Tarea 1: LED (Prioridad 2 - Media)
+    xTaskCreate(
+        Task_Blink,
+        "Blink_Task",
+        2048,
+        NULL,
+        2,
+        NULL
+    );
+
+    // Tarea 2: Telemetría (Prioridad 1 - Baja)
+    xTaskCreate(
+        Task_Telemetry,
+        "Telemetry_Task",
+        2048,
+        NULL,
+        1,
+        NULL
+    );
+}
+
+void loop() {
+    // Tarea de loop bloqueada para ceder el 100% de la CPU a las 3 tareas
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+}
