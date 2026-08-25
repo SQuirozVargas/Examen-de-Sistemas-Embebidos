@@ -13,3 +13,4 @@ Si intentas usar este puerto sin remapear sus pines a otros GPIO libres mediante
 ### UART2
 Es la interfaz serie completamente libre para las aplicaciones del usuario. Al no estar atada al USB de depuración ni a la memoria Flash, se emplea para conectar módulos externos como GPS, 
 Bluetooth, sensores seriales o para implementar un puerto de comandos externo (usando los pines GPIO17 para TX y GPIO16 para RX).
+<img width="642" height="472" alt="image" src="https://github.com/user-attachments/assets/214c1d80-d5e4-4201-98fe-2f3c8845a0c0" />
