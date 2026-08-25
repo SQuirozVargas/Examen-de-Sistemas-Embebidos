@@ -63,6 +63,7 @@ desactivados. La memoria de recuperación del RTC está apagada. Solo un
 temporizador RTC en el reloj lento y ciertos GPIO RTC están activos. El temporizador
 RTCo los GPIO RTC pueden activar el chip desde el modo de hibernación.
 
+<img width="875" height="532" alt="image" src="https://github.com/user-attachments/assets/b85e206f-898a-4cd5-938f-755f40ba0edb" />
 
 
 
