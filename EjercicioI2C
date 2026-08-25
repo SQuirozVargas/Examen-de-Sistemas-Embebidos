@@ -1,0 +1,225 @@
+/*
+OJO: Colocar esto en el .ini
+[env:esp32dev]
+platform = espressif32
+board = esp32dev
+framework = arduino
+monitor_speed = 115200
+lib_deps = 
+    adafruit/Adafruit SSD1306@^2.5.13
+    adafruit/Adafruit GFX Library@^1.11.11
+*/
+
+/*
+ * EJERCICIO 3: Integración de Sistemas Embebidos
+ * Arquitectura: FreeRTOS + UART + I2C (OLED SSD1306) + Queue (Cola de mensajes)
+ */
+
+#include <Arduino.h>           // Librería base del framework Arduino
+#include <Wire.h>              // Protocolo de comunicación I2C
+#include <Adafruit_GFX.h>      // Librería gráfica principal de Adafruit
+#include <Adafruit_SSD1306.h>  // Driver específico para pantalla OLED SSD1306
+
+// Configuración física de la Pantalla OLED I2C
+#define SCREEN_WIDTH  128  // Ancho de la pantalla en píxeles
+#define SCREEN_HEIGHT 64   // Alto de la pantalla en píxeles
+#define OLED_RESET    -1   // Sin pin de reset dedicado (usa el reset del ESP32)
+#define OLED_ADDRESS  0x3C // Dirección I2C predeterminada del controlador SSD1306
+
+// Configuración de Periféricos y Hardware
+#define LED_PIN          2      // Pin GPIO 2 para el LED de estado
+#define SERIAL_BAUD_RATE 115200 // Velocidad en baudios para la consola serial UART0
+
+// Objeto global de la pantalla OLED conectado vía I2C (&Wire)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Handle global de la Cola (Queue) para comunicación inter-tarea
+QueueHandle_t xCommandQueue = NULL;
+
+// Estructura de datos para empaquetar comandos a través de la Cola
+struct CommandMsg {
+    char command[16]; // Buffer tipo cadena para guardar el comando recibido (máx 15 chars + null)
+};
+
+// Historiales circulares/desplazables para el diagrama de tiempo de Gantt en OLED (32 columnas)
+static uint8_t history_task1[32] = {0}; // Historial de actividad: Tarea 1 (Telemetría)
+static uint8_t history_task2[32] = {0}; // Historial de actividad: Tarea 2 (Controlador)
+static uint8_t history_task3[32] = {0}; // Historial de actividad: Tarea 3 (Renderizado OLED)
+
+// ============================================================================
+// TAREA 1: Receptor UART de Comandos (Prioridad Alta = 3)
+// ============================================================================
+void Task_UART_Rx(void *pvParameters) {
+    while (true) {
+        // Verificar si hay bytes entrantes en el buffer serie
+        if (Serial.available() > 0) {
+            String incoming = Serial.readStringUntil('\n'); // Leer hasta encontrar el salto de línea
+            incoming.trim(); // Limpiar espacios y caracteres invisibles (\r, \n)
+
+            if (incoming.length() > 0) {
+                CommandMsg msg; // Declarar variable de la estructura de comando
+                snprintf(msg.command, sizeof(msg.command), "%s", incoming.c_str()); // Copiar texto al arreglo de caracteres
+
+                // Enviar la estructura a la Cola esperando máximo 100 Ticks si la cola estuviera llena
+                if (xQueueSend(xCommandQueue, &msg, pdMS_TO_TICKS(100)) == pdPASS) {
+                    Serial.println("[UART] Comando colado exitosamente."); // Confirmación por consola
+                } else {
+                    Serial.println("[UART ERROR] Cola llena. Descartado."); // Fallo por cola saturada
+                }
+            }
+        }
+        vTaskDelay(100 / portTICK_PERIOD_MS); // Ceder tiempo de CPU por 100 ms
+    }
+}
+
+// ============================================================================
+// TAREA 2: Controlador / Ejecutor de Comandos (Prioridad Media = 2)
+// ============================================================================
+void Task_Controller(void *pvParameters) {
+    pinMode(LED_PIN, OUTPUT);    // Declarar pin del LED como salida
+    digitalWrite(LED_PIN, LOW);  // Iniciar con LED apagado
+    bool led_state = false;      // Guardar estado lógico interno
+    CommandMsg receivedMsg;      // Buffer para recibir la estructura desde la Cola
+
+    while (true) {
+        // Bloquear esta tarea hasta que llegue un mensaje a la Cola (espera infinita con portMAX_DELAY)
+        if (xQueueReceive(xCommandQueue, &receivedMsg, portMAX_DELAY) == pdPASS) {
+            
+            history_task2[31] = 1; // Registrar pulso de ejecución activa en el historial de T2
+
+            // Evaluar comando "led on" (insensible a mayúsculas)
+            if (strcasecmp(receivedMsg.command, "led on") == 0) {
+                led_state = true; // Actualizar flag
+                digitalWrite(LED_PIN, HIGH); // Encender LED
+                Serial.println("[CONTROLLER] RESPONSE: LED Encendido");
+            } 
+            // Evaluar comando "led off"
+            else if (strcasecmp(receivedMsg.command, "led off") == 0) {
+                led_state = false; // Actualizar flag
+                digitalWrite(LED_PIN, LOW); // Apagar LED
+                Serial.println("[CONTROLLER] RESPONSE: LED Apagado");
+            } 
+            // Evaluar comando "status"
+            else if (strcasecmp(receivedMsg.command, "status") == 0) {
+                Serial.printf("[CONTROLLER] STATUS: OK | LED: %s\r\n", led_state ? "ON" : "OFF");
+            } 
+            // Respuesta por defecto ante entrada no reconocida
+            else {
+                Serial.println("[CONTROLLER ERROR] Comando no reconocido.");
+            }
+        }
+    }
+}
+
+// ============================================================================
+// TAREA 3: Telemetría de Sistema (Prioridad Baja = 1)
+// ============================================================================
+void Task_Telemetry(void *pvParameters) {
+    uint32_t count = 0; // Contador de iteraciones
+
+    while (true) {
+        count++; // Incrementar contador
+        uint32_t free_heap = ESP.getFreeHeap(); // Consultar bytes libres en la memoria RAM (Heap)
+        Serial.printf("[TELEMETRÍA] Ciclo: %lu | RAM Libre: %lu bytes\r\n", count, free_heap); // Imprimir diagnóstico
+
+        history_task1[31] = 1; // Registrar pulso de ejecución activa en el historial de T1
+
+        vTaskDelay(2000 / portTICK_PERIOD_MS); // Bloquear por 2000 ms (2 s)
+    }
+}
+
+// ============================================================================
+// TAREA 4: Renderizado del Gráfico de Gantt en OLED (Prioridad Baja = 1)
+// ============================================================================
+void Task_OLED_Gantt(void *pvParameters) {
+    while (true) {
+        // Desplazar el arreglo histórico un paso a la izquierda (efecto marquesina / desplazamiento horizontal)
+        for (int i = 0; i < 31; i++) {
+            history_task1[i] = history_task1[i + 1];
+            history_task2[i] = history_task2[i + 1];
+            history_task3[i] = history_task3[i + 1];
+        }
+        
+        // Limpiar el último slot del historial
+        history_task1[31] = 0;
+        history_task2[31] = 0;
+        history_task3[31] = 1; // Marcar a la propia tarea OLED como ejecutada en este frame
+
+        display.clearDisplay(); // Limpiar el buffer de video de la pantalla
+        display.setTextSize(1); // Ajustar tamaño del texto (fuente 5x7 px)
+        display.setTextColor(SSD1306_WHITE); // Establecer color blanco
+
+        // Dibujar encabezado de la interfaz
+        display.setCursor(0, 0); // Posicionar cursor en esquina superior izquierda
+        display.println("GANTT TIMELINE RTOS"); // Título principal
+        display.drawLine(0, 10, 127, 10, SSD1306_WHITE); // Línea divisoria horizontal
+
+        // Renderizar etiquetas de texto para cada tarea
+        display.setCursor(0, 16); display.print("T1 Telemetry");
+        display.setCursor(0, 32); display.print("T2 Control");
+        display.setCursor(0, 48); display.print("T3 OLED UI");
+
+        // Dibujar barras del diagrama de tiempo (Gantt) según el historial de actividad
+        for (int i = 0; i < 32; i++) {
+            int x = 80 + (i * 1.4); // Calcular coordenada X del pixel/barra en pantalla
+
+            // Tarea 1: Dibujar barra vertical si estuvo activa, o punto si estuvo bloqueada
+            if (history_task1[i]) display.drawFastVLine(x, 16, 8, SSD1306_WHITE);
+            else display.drawPixel(x, 23, SSD1306_WHITE);
+
+            // Tarea 2: Estado de ejecución
+            if (history_task2[i]) display.drawFastVLine(x, 32, 8, SSD1306_WHITE);
+            else display.drawPixel(x, 39, SSD1306_WHITE);
+
+            // Tarea 3: Estado de ejecución
+            if (history_task3[i]) display.drawFastVLine(x, 48, 8, SSD1306_WHITE);
+            else display.drawPixel(x, 55, SSD1306_WHITE);
+        }
+
+        display.display(); // Enviar el buffer gráfico a la pantalla física mediante I2C
+
+        vTaskDelay(200 / portTICK_PERIOD_MS); // Refrescar gráfico cada 200 ms
+    }
+}
+
+// ============================================================================
+// INICIALIZACIÓN Y CONFIGURACIÓN DEL SISTEMA
+// ============================================================================
+void setup() {
+    Serial.begin(SERIAL_BAUD_RATE); // Inicializar puerto serie a 115200 baudios
+    delay(1000); // Pausa de estabilización
+
+    // Inicializar el controlador de la pantalla OLED I2C
+    if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
+        Serial.println("[ERROR] No se encontró pantalla OLED SSD1306."); // Notificar error
+        for (;;); // Bucle infinito para detener arranque si falla el hardware de visualización
+    }
+
+    // Pantalla de carga inicial
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(10, 20);
+    display.println("Iniciando RTOS...");
+    display.display();
+
+    // Crear la Cola de FreeRTOS (Capacidad: 5 elementos de tipo CommandMsg)
+    xCommandQueue = xQueueCreate(5, sizeof(CommandMsg));
+
+    // Validar asignación correcta de memoria RAM para la cola
+    if (xCommandQueue == NULL) {
+        Serial.println("[ERROR] No se pudo asignar memoria para la Cola.");
+        return;
+    }
+
+    // Registro e instanciación de las 4 Tareas con sus respectivas prioridades y stacks
+    xTaskCreate(Task_UART_Rx,    "UART_Task",      2048, NULL, 3, NULL); // Prioridad 3 (Alta)
+    xTaskCreate(Task_Controller, "Controller_Task", 2048, NULL, 2, NULL); // Prioridad 2 (Media)
+    xTaskCreate(Task_Telemetry,  "Telemetry_Task",  2048, NULL, 1, NULL); // Prioridad 1 (Baja)
+    xTaskCreate(Task_OLED_Gantt, "OLED_Task",       3072, NULL, 1, NULL); // Prioridad 1 (Baja) + 3KB Stack
+}
+
+void loop() {
+    // Tarea de loop desactivada reteniendo tiempo con vTaskDelay para no saturar la CPU
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+}
